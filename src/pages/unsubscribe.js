@@ -1,104 +1,113 @@
-import { useState } from 'react'
-import { supabase } from '@/utils/supabaseClient'
+import { useState } from 'react';
+import { createClient } from '@supabase/supabase-js';
 
-export default function UnsubscribeForm() {
-  const [formData, setFormData] = useState({
-    email: '',
-    reason: '',
-    comment: '',
-  })
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+);
 
-  const [submitted, setSubmitted] = useState(false)
-
-  const handleChange = (e) => {
-    const { name, value } = e.target
-    setFormData((prev) => ({ ...prev, [name]: value }))
-  }
+export default function UnsubscribePage() {
+  const [email, setEmail] = useState('');
+  const [reason, setReason] = useState('');
+  const [comment, setComment] = useState('');
+  const [submitted, setSubmitted] = useState(false);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e) => {
-    e.preventDefault()
+    e.preventDefault();
+    setLoading(true);
+    setSubmitted(false);
+    setError('');
 
-    const { email, reason, comment } = formData
+    const { error: supabaseError } = await supabase
+      .from('unsubscribes')
+      .insert([{ email, reason, comment }]);
 
-    const { error } = await supabase.from('unsubscribes').insert([
-      { email, reason, comment }
-    ])
-
-    if (error) {
-      console.error('Supabase insert error:', error.message)
-      alert('Something went wrong. Please try again.')
-    } else {
-      setSubmitted(true)
+    try {
+      await fetch('https://script.google.com/macros/s/AKfycbx1AO5WMm9GVF5mtaSGYDr8genJV2QjeZ_hjQmdnqAkcX7b5x2GOPvzfCW8Q7Md8hUrhA/exec', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, reason, comment }),
+      });
+    } catch (err) {
+      console.error('Failed to sync with Google Sheets:', err);
     }
-  }
 
-  if (submitted) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-neutral text-green-700 px-4">
-        <img src="/expohub-logo.png" alt="ExpoHub Logo" className="h-12 mb-6" />
-        <p className="text-xl font-semibold text-center">✅ You’ve been unsubscribed. Thank you.</p>
-      </div>
-    )
-  }
+    if (supabaseError) {
+      setError('Something went wrong, please try again.');
+    } else {
+      setSubmitted(true);
+      setEmail('');
+      setReason('');
+      setComment('');
+    }
+
+    setLoading(false);
+  };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-neutral px-4">
-      <div className="w-full max-w-md">
-        <form onSubmit={handleSubmit} className="bg-white p-8 rounded-xl shadow-xl">
-          <div className="flex justify-center mb-6">
-            <img src="/expohub-logo.png" alt="ExpoHub Logo" className="h-10" />
+      <div className="bg-white max-w-md w-full p-8 rounded-xl shadow-lg">
+        <img
+          src="/logo.png"
+          alt="ExpoHub Logo"
+          className="mx-auto mb-6 h-12"
+        />
+        {submitted ? (
+          <div className="text-center text-green-600 text-lg font-medium">
+            You've been unsubscribed. Thank you.
           </div>
+        ) : (
+          <>
+            <h1 className="text-2xl font-bold mb-4 text-center text-[#003366]">
+              Unsubscribe from Emails
+            </h1>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <input
+                type="email"
+                placeholder="Your email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                className="w-full border rounded-md px-4 py-2"
+              />
 
-          <h2 className="text-2xl font-bold mb-6 text-primary text-center">
-            Manage Your Emails
-          </h2>
+              <select
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                className="w-full border rounded-md px-4 py-2"
+                required
+              >
+                <option value="">Reason for unsubscribing</option>
+                <option value="Too many emails">Too many emails</option>
+                <option value="Not relevant">Not relevant</option>
+                <option value="Signed up by mistake">Signed up by mistake</option>
+                <option value="Other">Other</option>
+              </select>
 
-          <label className="block mb-2 text-sm font-medium text-slate-700">
-            Email (required):
-          </label>
-          <input
-            type="email"
-            name="email"
-            required
-            value={formData.email}
-            onChange={handleChange}
-            className="w-full p-2 border border-slate-300 rounded mb-4 focus:outline-none focus:ring-2 focus:ring-accent"
-          />
+              <textarea
+                placeholder="Optional comments..."
+                value={comment}
+                onChange={(e) => setComment(e.target.value)}
+                className="w-full border rounded-md px-4 py-2"
+              />
 
-          <label className="block mb-2 text-sm font-medium text-slate-700">
-            Reason for unsubscribing:
-          </label>
-          <select
-            name="reason"
-            value={formData.reason}
-            onChange={handleChange}
-            className="w-full p-2 border border-slate-300 rounded mb-4"
-          >
-            <option value="">Select a reason</option>
-            <option value="Not interested">Not interested</option>
-            <option value="Too many emails">Too many emails</option>
-            <option value="Not the right person">Not the right person</option>
-            <option value="Other">Other</option>
-          </select>
+              {error && (
+                <div className="text-red-600 text-sm text-center">{error}</div>
+              )}
 
-          <label className="block mb-2 text-sm font-medium text-slate-700">
-            Comments (optional):
-          </label>
-          <textarea
-            name="comment"
-            value={formData.comment}
-            onChange={handleChange}
-            className="w-full p-2 border border-slate-300 rounded mb-6"
-          />
-
-          <button
-            type="submit"
-            className="w-full bg-[#003366] text-white py-2 rounded-xl hover:shadow-xl transition"
-          >
-            Unsubscribe
-          </button>
-        </form>
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full bg-[#003366] text-white py-2 rounded-xl hover:shadow-xl transition"
+              >
+                {loading ? 'Submitting...' : 'Unsubscribe'}
+              </button>
+            </form>
+          </>
+        )}
       </div>
     </div>
-  )
+  );
 }
